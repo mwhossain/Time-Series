@@ -1,0 +1,124 @@
+---
+title: "HW 3"
+output:
+  word_document: default
+  html_document: default
+---
+
+## R Markdown
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library("readxl")
+library("magrittr")
+library("tidyverse")
+library("xts")
+library(fpp)
+library(TSA)
+library(forecast)
+library(astsa)
+```
+
+
+##1. Load and plot the data
+```{r load, echo =TRUE}
+dataPath<-"C:/Users/manya/OneDrive/Documents/Time Series/assgt 4 data/Traffic Flow Data/" 
+man_dates <- read_excel(paste0(dataPath,"assgt 4 manual.xls")) 
+datetime <-seq(from = as.POSIXct("2013-6-16 01:00"), by="hour", length.out = 384)
+
+dates_cars <-cbind(datetime, man_dates) 
+XTScars <- xts(x = man_dates, order.by = datetime) 
+plot(XTScars)
+
+```
+ 
+I tried to upload the data as follows but I could not get the data to bind in a way that could be transformed into a ts object. I ultimately manually coppied and pasted the data into a single excel document instead.
+
+june16 <- read_excel(paste0(dataPath,"I-57-2013-June-16.xls")) june16<-as.data.frame(june16) (and on like so for the remaining datasets)
+
+cars <-rbind(june16[5:28,5:5], june17[5:28,5:5], june18[5:28,5:5], june19[5:28,5:5], june20[5:28,5:5], 
+             june21[5:28,5:5], june22[5:28,5:5], june23[5:28,5:5], june24[5:28,5:5], june25[5:28,5:5],
+             june26[5:28,5:5], june27[5:28,5:5], june28[5:28,5:5], june29[5:28,5:5], june30[5:28,5:5], 
+             july1[5:28,5:5])
+
+I also could not get either the algorithm or manually extracted data to plot after using ts() to transform it into a time series object, so I used XTS() to tranform instead. 
+
+##2. Split into training and testing datasets.
+```{r split, echo =TRUE}
+print("Split the data into train and test")
+trainXTS <- xts(x = man_dates[1:360,1:1], order.by = datetime[1:360])
+testXTS <- xts(x = man_dates[360:384,1:1], order.by = datetime[360:384])
+
+print ("Plot the ACF and PACF")
+acf(trainXTS)
+pacf(trainXTS)
+
+print ("Apply ADF Test")
+adf.test(trainXTS)
+
+```
+The p-value from the ADF test is small enough to reject the null, indicating that the data is stationary.
+
+##3. Build an Arima(p,d,q) model
+```{r ARIMA, echo =TRUE}
+auto.arima(trainXTS, trace=TRUE)
+bestAuto<- Arima(trainXTS, order=c(2,0,3))
+print("Residuals from Auto.Arima")
+checkresiduals(bestAuto)
+
+bestManual<- Arima(trainXTS, order=c(4,0,3))
+print("Residuals from Manual Arima")
+checkresiduals(bestManual)
+```
+
+Though the model chosen by auto.arima does have the best AICc and BIC values of the different models that it tried, the manually generated model has slightly better AICc and BIC values. The residuals of the auto-generated model appear to have a normal distribution. The residuals of the manually generated model seem to have a slight right tail but is still fairly normally distributed.
+
+##4. Build daily Arima(p,d,q)(P,D,Q) model
+```{r build daily, echo =TRUE}
+Arima(trainXTS, order=c(4,0,3), seasonal=list(order=c(0,1,1),period=7))
+Arima(trainXTS, order=c(2,0,3), seasonal=list(order=c(0,1,1),period=7))
+Arima(trainXTS, order=c(4,0,3), seasonal=list(order=c(0,1,0),period=7))
+Arima(trainXTS, order=c(4,0,3), seasonal=list(order=c(0,0,1),period=7))
+Arima(trainXTS, order=c(4,0,3), seasonal=list(order=c(1,0,0),period=7))
+bestfitdaily<-Arima(trainXTS, order=c(4,0,3), seasonal=list(order=c(0,1,1),period=7*24))
+checkresiduals(bestfitdaily)
+
+```
+I could not get auto.arima() to generate a (P,D,Q) model when using d=1 or D=TRUE. Of the models manually run, the one that generated the best AICc and BIC models was labeled 'bestfitdaily'.
+
+##5. Forecast July 1st using daily model
+```{r predict daily, echo =TRUE}
+dailyjuly1<-predict(bestfitdaily, n.ahead = 24)
+plot(dailyjuly1$pred, main="July 1, Daily Model")
+```
+
+
+##6. Build hourly Arima(p,d,q)(P,D,Q) model
+```{r build hourly, echo =TRUE}
+fithourly<-arima(trainXTS, order=c(2,0,2), seasonal=list(order=c(0,1,1),period=7))
+checkresiduals(fithourly)
+
+```
+
+##7. Forecast July 1st using hourly model
+```{r predict hourly, echo =TRUE}
+hourlyjuly1<-predict(fithourly, n.ahead = 24)
+plot(hourlyjuly1$pred, main="July 1, Hourly Model")
+
+```
+
+##8. Compare forecasted values to actual test values
+```{r compare_forecast, echo =TRUE}
+hourly <-c(hourlyjuly1$pred[8],hourlyjuly1$pred[9], hourlyjuly1$pred[17], hourlyjuly1$pred[18])
+daily  <-c(dailyjuly1$pred[8], dailyjuly1$pred[9], dailyjuly1$pred[17], dailyjuly1$pred[18])
+test_sample<-c(testXTS[8], testXTS[9], testXTS[17], testXTS[18])
+
+Hourly<-reclass(hourly, match.to = test_sample, error = FALSE)
+Daily<-reclass(daily, match.to = test_sample, error = FALSE)
+
+Compare<-cbind(test_sample, Daily, Hourly)
+Compare
+
+```
+
+As we can see, the values predicted by the hourly model come much closer to the true values. 

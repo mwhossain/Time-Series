@@ -1,0 +1,106 @@
+---
+title: "HW 7"
+output:
+  word_document: default
+  html_document: default
+---
+
+## R Markdown
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+load("C:/Users/manya/Downloads/motel.rda")
+library(vars)
+library("readxl")
+library("magrittr")
+library("tidyverse")
+library("xts")
+library(fpp)
+library(TSA)
+library(forecast)
+library(astsa)
+```
+
+
+##1.a,b Plote Time Series and calculate Cost
+```{r plot, echo =TRUE}
+Cost<-1000*(motel[,2:2]/motel[,1:1])
+CPI<-motel[,3:3]
+
+#1.a
+plot(Cost)
+plot(CPI)
+
+#1.b
+plot(Cost,type="l", col=1, xlab="Time", ylab="AUD")
+ lines(CPI,type="l", col=2)
+ legend("topleft",legend=c("Cost", "CPI"),col=1:2,lty=1) 
+ 
+cor(Cost, CPI) 
+```
+Both datasets show a positive trend over time. The Cost time series shows a nonlinear pattern in its upward trend, increasing exponentially between 1985 and about 1990, then flattening out until 1995. The variance also increases over time. The log of the data should be taken in order to account for this variation in the trend. The CPI data seems to increase linearly until about 1990, at which point the trend flattens out. The variance for CPI stays more consistent over time. Taking the log will still ensure that any variation in the trend is accounted for and will allow us to compare it to the Cost data more directly. 
+
+##1.c
+```{r plot logs, echo =TRUE}
+plot(log(Cost))
+plot(log(CPI))
+
+cor(log(Cost),log(Cost)) 
+```
+
+
+##2. Plot the training dataset.
+```{r tslm, echo =TRUE}
+log_lin<-tslm(log(Cost)~log(CPI)) 
+
+plot(log(CPI), log(Cost))
+ abline(tslm(log(Cost)~log(CPI)), col = "blue")
+
+summary(log_lin)
+checkresiduals(log_lin)
+```
+The residuals do not appear to be stationary, so there seems to be more information to be extracted from the data. The ACF indicates there is still a lot of correlation in the residuals. The residuals may have a slight right tale, indicated they are not quite normally distributed. 
+
+
+##3. Fit Auto.arima model
+```{r auto.arima, echo =TRUE}
+arima<-auto.arima(Cost, D = 1, lambda = 0, xreg = CPI)
+summary(arima)
+
+checkresiduals(arima)
+```
+This time the residuals appear to be stationary, so it looks like the model has been appropriately fit. The ACF indicates that most of correlation has been accounted for in the model. The distribution of residuals does not appear to have a distinct tale to the right or left. 
+
+##4. Naive Forecast
+```{r naive forecast, echo =TRUE}
+
+#4.a
+Naive <-naive(CPI, 18)
+plot(Naive)
+
+#4.b
+arima_forc<-forecast(arima, xreg=Naive$fitted,h=1.5)
+plot(arima_forc$mean, ylab="Cost - Arima Forecast")
+```
+
+The model forecasts values with a slight positive trend and seasonality.  
+
+##5. VAR model
+```{r VAR, echo =TRUE}
+Cost_l<-log(Cost)
+CPI_l<-log(CPI)
+logCostCPIframe<-data.frame(Cost_l, CPI_l)
+
+Var<-VAR(logCostCPIframe, p = 10, type = "both", season = 12)
+
+varforc<-predict(Var, h=18)
+varforc
+
+plot(varforc)
+
+Residuals<-residuals(Var)
+acf(Residuals)
+```
+
+The forecasted values appear to be reasonable estimates of future data. On the ACF plot, all lag values fall within the confidence interval, indicating that any autocorrelation has been accounted for in the model. 
+

@@ -1,0 +1,112 @@
+---
+title: "HW 3"
+output:
+  word_document: default
+  html_document: default
+---
+
+## R Markdown
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+load("C:/Users/manya/Downloads/usgdp.rda")
+library(TSA)
+library(fpp)
+library(tseries)
+library(ggplot2)
+library(forecast)
+library(MLmetrics)
+```
+
+
+##1. Split the data into train and tests sets
+```{r split, echo =TRUE}
+traind<- window(usgdp, 1947, c(2005,1)) 
+testd<- window(usgdp, c(2005,2), c(2006,1)) 
+print(traind)
+
+```
+
+##2. Plot the training dataset.
+```{r plot train, echo =TRUE}
+autoplot(traind)
+```
+
+There doesn't seem to be a very clear seasonal pattern in the data so no transformation is needed to remove the variance's dependence on mean. However, overall there does seem to be a slight exponential trend in the data, so a transformation can be used to make the trend linear. 
+
+##3. Plot 1st and 2nd order differences
+```{r difference orders, echo =TRUE}
+fstorddiff<-diff(traind)
+sndorddiff<-diff(traind, differences = 2)
+
+plot(diff(fstorddiff))
+plot(diff(sndorddiff))
+```
+
+##Apply KPSS Test for Stationarity
+```{r KPSS test, echo =TRUE}
+kpss.test(fstorddiff)
+kpss.test(sndorddiff)
+```
+The KPSS test for the 1st order difference results in a p-value small enough to reject the null. Because the null hypothesis for the KPSS test is stationarity, the 1st difference order results in a non-stationary dataset.The KPSS test for the 2nd order difference results in a p-value too large to reject the null. Thus the 2nd difference order results in a stationary dataset.
+
+##4. Fit ARIMA model
+```{r arima, echo =TRUE}
+#Find best Lambda value and transform the data
+bestLambda <- BoxCox.lambda(traind)
+train_l<-BoxCox(traind, bestLambda)
+
+#Fit ARIMA
+fit <- auto.arima(train_l,seasonal=FALSE)
+fit
+```
+This appears to be an AR Model will coefficients of 0.2829 and 0.1163, a b("drift") coefficient of 0.1851.In this model, p=2, d=1, and q=0.
+
+##5. Compute EACF
+```{r eacf, echo =TRUE}
+eacf(train_l, ar.max = 2, ma.max = 2)
+
+#Try other ARIMA models
+arima_00 <-Arima(train_l, order=c(0,1,0))
+arima_01 <-Arima(train_l, order=c(0,1,1))
+arima_02 <-Arima(train_l, order=c(0,1,2))
+arima_10 <-Arima(train_l, order=c(1,1,0))
+arima_11 <-Arima(train_l, order=c(1,1,1))
+
+#Compare AIC using summary()
+summary(fit)
+summary(arima_00)
+summary(arima_01)
+summary(arima_02)
+summary(arima_10)
+summary(arima_11)
+```
+Comparing the AIC values of the different ARIMA models, we find that auto.Arima model produces the smalles AIC value, -101.19.
+
+##6. Forecast and plot GDP for test period
+```{r forecast, echo =TRUE}
+plot(forecast(fit,h=10),include=100)
+
+```
+
+##7. Compare forecasted values to actual test values
+```{r compare_forecast, echo =TRUE}
+forcast<-forecast(fit,h=4)
+forc_mean<-forcast$mean
+inv_forc<-InvBoxCox(forc_mean, bestLambda, biasadj = FALSE, fvar = NULL)
+print("Forecast Values")
+print(inv_forc)
+
+print("Test Values")
+testd 
+
+#error
+error = inv_forc - testd
+print("error")
+error
+```
+
+##8. Calculate MSE
+```{r sse, echo =TRUE}
+MSE(y_pred = inv_forc, y_true = testd)
+```

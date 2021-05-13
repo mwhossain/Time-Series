@@ -1,0 +1,216 @@
+---
+title: "HW 5"
+output:
+  word_document: default
+  html_document: default
+---
+
+## R Markdown
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(TSA)
+library(fpp)
+library(tseries)
+library(ggplot2)
+library(forecast)
+library(MLmetrics)
+library(MASS)
+```
+
+
+##1. Load and plot the data set, with and without BoxCoX Transformation
+```{r load, echo =TRUE}
+load("C:/Users/manya/Downloads/visitors (1).rda")
+
+plot(visitors)
+lambda<-BoxCox.lambda(visitors)
+lambda
+visitors_l<-BoxCox(visitors, lambda)
+plot(visitors_l)
+
+```
+We see some distinct seasonality in this data. We also see an increase in variance over time. This indicates that the data is nonstationary. There is a linear positive trend in the data over time. 
+
+##2. Build Models.
+```{r models, echo =TRUE}
+print("Model 1: Arima ")
+auto.arima(visitors)
+
+print("Model2: ets ")
+ets(visitors)
+
+
+```
+
+
+
+
+##3.1 Cross-validation of Arima model
+```{r arima cv, echo =TRUE}
+
+model_1 <- function(x, h){forecast(Arima(x, order=c(1,0,1), seasonal =list( order=c(0, 1, 2), period=12)), h=h)}
+error_1 <- tsCV(visitors, model_1, h=12, initial = 160)
+error_2 <- tsCV(visitors, model_1, h=12, window = 12) # Rolling/Sliding Window
+
+print("Expanding Window Error means")
+colMeans(error_1,na.rm=TRUE)
+
+print("Rolling Window Error means")
+colMeans(error_2,na.rm=TRUE)
+
+k <- 160 # minimum data length for fitting a model
+n <- length(visitors) # Number of data points
+
+p <- 12 ### Period
+H <- 12 # Forecast Horiz
+
+defaultW <- getOption("warn") 
+options(warn = -1)
+
+st <- tsp(visitors)[1]+(k-2)/p #  gives the start time in time units,
+
+mae_1 <- matrix(NA,n-k,H)
+mae_2 <- matrix(NA,n-k,H)
+
+
+for(i in 1:(n-k))
+{
+  
+  
+  ### One Month rolling forecasting
+  # Expanding Window 
+  train_1 <- window(visitors, end=st + i/p)  ## Window Length: k+i
+  
+  # Sliding Window - keep the training window of fixed length. 
+  # The training set always consists of k observations.
+  train_2 <- window(visitors, start=st+(i-k+1)/p, end=st+i/p) ## Window Length: k
+  
+  test <- window(visitors, start=st + (i+1)/p, end=st + (i+H)/p) ## Window Length: H
+  
+  if (i<4) {
+    cat(c("*** CV", i,":","len(Expanding Window):",length(train_1), "len(Sliding Window):",length(train_2), "len(Test):",length(test),'\n'  ))
+    cat(c("*** TRAIN -  Expanding WIndow:",tsp(train_1)[1],'-',tsp(train_1)[2],'\n'))
+    cat(c("*** TRAIN - Sliding WIndow:",tsp(train_2)[1],'-',tsp(train_2)[2],'\n'))
+    cat(c("*** TEST:",tsp(test)[1],'-',tsp(test)[2],'\n'))
+    cat("*************************** \n \n")
+  }
+  
+  
+  fit_1 <- Arima(train_1, order=c(3,0,1), seasonal=list(order=c(0,1,1), period=p),
+                 include.drift=TRUE, lambda=0, method="ML")
+  fcast_1 <- forecast(fit_1, h=H)
+  
+  
+  fit_2 <- Arima(train_2, order=c(3,0,1), seasonal=list(order=c(0,1,1), period=p),
+                 include.drift=TRUE, lambda=0, method="ML")
+  fcast_2 <- forecast(fit_2, h=H)
+  
+  
+  
+  mae_1[i,1:length(test)] <- abs(fcast_1[['mean']]-test)
+  mae_2[i,1:length(test)] <- abs(fcast_2[['mean']]-test)
+  
+}
+
+```
+
+
+##3.2 Cross-validation of ETS model
+```{r ets cv, echo =TRUE}
+
+model_2 <- function(x, h){forecast(ets(x, model="MAM"), h=h)}
+error_3 <- tsCV(visitors, model_2, h=12, initial = 160)
+error_4 <- tsCV(visitors, model_2, h=12, window = 12) # Rolling/Sliding Window
+
+print("Expanding Window Error means")
+colMeans(error_3,na.rm=TRUE)
+
+print("Rolling Window Error means")
+colMeans(error_4,na.rm=TRUE)
+
+k <- 160 # minimum data length for fitting a model
+n <- length(visitors) # Number of data points
+
+p <- 12 ### Period
+H <- 12 # Forecast Horiz
+
+defaultW <- getOption("warn") 
+options(warn = -1)
+
+st <- tsp(visitors)[1]+(k-2)/p #  gives the start time in time units,
+
+mae_3 <- matrix(NA,n-k,H)
+mae_4 <- matrix(NA,n-k,H)
+
+
+for(i in 1:(n-k))
+{
+  
+  
+  ### One Month rolling forecasting
+  # Expanding Window 
+  train_1 <- window(visitors, end=st + i/p)  ## Window Length: k+i
+  
+  # Sliding Window - keep the training window of fixed length. 
+  # The training set always consists of k observations.
+  train_2 <- window(visitors, start=st+(i-k+1)/p, end=st+i/p) ## Window Length: k
+  
+  test <- window(visitors, start=st + (i+1)/p, end=st + (i+H)/p) ## Window Length: H
+  
+  if (i<4) {
+    cat(c("*** CV", i,":","len(Expanding Window):",length(train_1), "len(Sliding Window):",length(train_2), "len(Test):",length(test),'\n'  ))
+    cat(c("*** TRAIN -  Expanding WIndow:",tsp(train_1)[1],'-',tsp(train_1)[2],'\n'))
+    cat(c("*** TRAIN - Sliding WIndow:",tsp(train_2)[1],'-',tsp(train_2)[2],'\n'))
+    cat(c("*** TEST:",tsp(test)[1],'-',tsp(test)[2],'\n'))
+    cat("*************************** \n \n")
+  }
+  
+
+  fit3 <- 
+  
+  fit_3 <- ets(train_1,model="MAM",damped=TRUE)
+  fcast_3 <- forecast(fit_3, h=H)
+  
+  fit_4 <- ets(train_2,model="MAM",damped=TRUE)
+  fcast_4 <- forecast(fit_4, h=H)
+  
+  
+  mae_3[i,1:length(test)] <- abs(fcast_3[['mean']]-test)
+  mae_4[i,1:length(test)] <- abs(fcast_4[['mean']]-test)
+  
+}
+
+print("Arima Expanding Window RMSE") 
+sqrt(mean(error_1^2, na.rm=TRUE))
+
+print("Arima Rolling Window RMSE") 
+sqrt(mean(error_2^2, na.rm=TRUE))
+
+print("ETS Expanding Window RMSE") 
+sqrt(mean(error_3^2, na.rm=TRUE))
+
+print("ETS Rolling Window RMSE") 
+sqrt(mean(error_4^2, na.rm=TRUE))
+
+```
+I struggled with some of the requested values for this question. I wasn't able to figure out how to print the AICc values for each model in each window. I also couldn't figure out how to perform the RMSE function across each forecast horizon window. The values reported here appear to be for h=1. 
+
+##4. Plot MAEs and RMSEs
+```{r arima, echo =TRUE}
+
+plot(1:12, colMeans(mae_1,na.rm=TRUE), type="l", col=2, xlab="horizon", ylab="MAE")
+lines(1:12, colMeans(mae_2,na.rm=TRUE), type="l",col=3)
+lines(1:12, colMeans(mae_3,na.rm=TRUE), type="l",col=4)
+lines(1:12, colMeans(mae_4,na.rm=TRUE), type="l",col=5)
+legend("topleft",legend=c("ARIMA - Expanding Window","ARIMA - Sliding Window", 'ETS - Expanding Window Window ', 'ETS - Sliding Window Window '),col=1:4,lty=1)
+
+
+
+```
+
+Unfortunately, because I struggled with generating some of the validation values above, it's difficult to make an assesment of the robustness of this model. The greatest advantage of this method would be the fact that it is automated, so it relies on the computing power of the program. Perhaps there would be some value in manually testing models with different parameters. For example, I initially built the Arima and ETS models using the manually Box-Cox Transformed data, and those models actually had much lower AIC scores than the ones shown here, built with the original data. So perhaps I should have proceeded with that method. 
+
+
+** I do apologize for the missing parts of this submission. I really tried to understand how to generate the requested values but wasn't able to understand how ultimately. 
+
